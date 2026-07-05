@@ -1,0 +1,202 @@
+syntax = "proto3";
+
+package forum;
+option go_package = "./forum";
+
+message BaseResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+message Pagination {
+  int64 page = 1; // 当前页
+  int64 page_size = 2; // 每页大小
+  int64 total = 3; // 总数
+}
+
+message Sort {
+  string field = 1; // 排序字段
+  string order = 2; // 排序方式 asc/desc
+} 
+
+////////////////////////// 社区模块 //////////////////////////
+
+enum Status {
+  STATUS_UNKNOWN = 0;
+  STATUS_PUBLISHED = 30; // 已发布
+  STATUS_DELETED = 90; // 已删除
+}
+
+// 帖子 (内容统一模型，纯 parent_id 邻接树，最多 2 层)
+//   - parent_id = 0          : 帖子(根节点)
+//   - parent_id = 帖子id     : 一级评论
+//   - parent_id = 一级评论id : 回复
+message Post {
+  int64 id = 1; // 主键
+  int64 user_id = 2; // 用户ID
+  string account = 3; // 用户账号名
+  Status status = 4; // 状态 30:已发布 90:已删除
+  string remark = 5; // 备注
+  string content = 6; // 内容
+  repeated string images = 7; // 图片信息
+  int32 word_count = 8; // 字数
+  int32 view_count = 9; // 浏览量
+  int32 like_count = 10; // 点赞量
+  int32 comment_count = 11; // 评论量
+  int32 fav_count = 12; // 收藏量
+  int64 publish_time = 13; // 发布时间
+  bool is_liked = 14; // 当前操作人是否已点赞
+  bool is_fav = 15; // 当前操作人是否已收藏
+  int64 parent_id = 16; // 父节点ID 0:帖子 帖子id:一级评论 评论id:回复
+  string ip_address = 18; // IP地址
+  Post parent = 20; // 直接父节点(评论场景下由服务端回填; 回复的根帖子为 parent.parent)
+}
+
+// 点赞
+message Like {
+  int64 id = 1; // 主键
+  int64 target_id = 2; // 目标内容ID (帖子或评论)
+  int64 user_id = 3; // 用户ID
+  string account = 4; // 用户账号名
+  Status status = 5; // 状态 30:正常 90:已删除
+  string ip_address = 6; // IP地址
+  int64 create_time = 8; // 创建时间
+}
+
+// 收藏
+message Fav {
+  int64 id = 1; // 主键
+  int64 target_id = 2; // 目标内容ID (帖子或评论)
+  int64 user_id = 3; // 用户ID
+  string account = 4; // 用户账号名
+  Status status = 5; // 状态 30:正常 90:已删除
+  int64 create_time = 6; // 创建时间
+  Post post = 7; // 目标内容 (帖子或评论, 统一用 Post 表示)
+}
+
+////////////////////////// 帖子相关接口 //////////////////////////
+
+message CreatePostRequest {
+  Post post = 1;
+}
+
+message CreatePostResponse {
+  BaseResponse base_resp = 1;
+  Post post = 2;
+}
+
+message UpdatePostRequest {
+  Post post = 1;
+}
+
+message UpdatePostResponse {
+  BaseResponse base_resp = 1;
+}
+
+message GetPostRequest {
+  int64 id = 1;
+}
+
+message GetPostResponse {
+  BaseResponse base_resp = 1;
+  Post post = 2;
+}
+
+message PostFilter {
+  int64 post_id = 1; // 帖子ID (可选，用于查询指定帖子)
+  string content = 2; // 内容模糊搜索 (可选, 仅对帖子有效)
+  repeated Status status = 3; // 状态筛选 (可选, 默认仅已发布)
+  string account = 4; // 用户账号名 (可选)
+  int64 publish_time_start = 5; // 发布时间开始时间 (可选)
+  int64 publish_time_end = 6; // 发布时间结束时间 (可选)
+}
+
+message ListPostRequest {
+  Pagination pagination = 1;
+  PostFilter post_filter = 2; // 帖子筛选条件
+  repeated Sort sorts = 3; // 排序条件
+  int64 operator_id = 4; // 操作人ID
+  int64 user_id = 5; // 用户ID (可选，按作者过滤)
+  // 父节点过滤: 0=帖子(根); >0=该节点的直接子节点(评论/回复); -1=仅评论(parent_id<>0)
+  int64 parent_id = 6;
+}
+
+message ListPostResponse {
+  BaseResponse base_resp = 1;
+  Pagination pagination = 2;
+  repeated Post posts = 3;
+}
+
+////////////////////////// 收藏相关接口 //////////////////////////
+
+message FavRequest {
+  int64 user_id = 1; // 用户ID
+  int64 target_id = 2; // 目标内容ID (帖子或评论)
+}
+
+message FavResponse {
+  BaseResponse base_resp = 1;
+}
+
+message ListFavRequest {
+  Pagination pagination = 1;
+  int64 user_id = 2; // 用户ID
+  repeated Sort sorts = 3; // 排序条件
+  repeated int64 target_ids = 4; // 目标内容ID列表
+}
+
+message ListFavResponse {
+  BaseResponse base_resp = 1;
+  Pagination pagination = 2;
+  repeated Fav favs = 3;
+}
+
+////////////////////////// 点赞相关接口 //////////////////////////
+
+message LikeRequest {
+  int64 user_id = 1; // 用户ID
+  int64 target_id = 2; // 目标内容ID (帖子或评论)
+  string ip_address = 3; // IP地址
+  int32 device = 4; // 设备 和Users服务的Platform类型一致
+}
+
+message LikeResponse {
+  BaseResponse base_resp = 1;
+}
+
+message ListLikeRequest {
+  Pagination pagination = 1;
+  int64 user_id = 2; // 用户ID
+  repeated Sort sorts = 3; // 排序条件
+  repeated int64 target_ids = 4; // 目标内容ID列表
+}
+
+message ListLikeResponse {
+  BaseResponse base_resp = 1;
+  Pagination pagination = 2;
+  repeated Like likes = 3;
+}
+
+////////////////////////// 社区服务 //////////////////////////
+
+// 社区服务（帖子与评论统一为内容树, 评论=带 parent_id 的帖子）
+service Forum {
+  // 创建内容（parent_id=0 为帖子，>0 为评论/回复）
+  rpc CreatePost(CreatePostRequest) returns(CreatePostResponse);
+  // 更新内容（删除）
+  rpc UpdatePost(UpdatePostRequest) returns(UpdatePostResponse);
+  // 获取内容
+  rpc GetPost(GetPostRequest) returns(GetPostResponse);
+  // 获取内容列表（按 parent_id 区分帖子/评论）
+  rpc ListPost(ListPostRequest) returns(ListPostResponse);
+
+  // 收藏
+  rpc Fav(FavRequest) returns(FavResponse);
+  // 获取收藏列表
+  rpc ListFav(ListFavRequest) returns(ListFavResponse);
+
+  // 点赞
+  rpc Like(LikeRequest) returns(LikeResponse);
+  // 获取点赞列表
+  rpc ListLike(ListLikeRequest) returns(ListLikeResponse);
+}
